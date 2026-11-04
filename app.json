@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "DoodhWala",
+    "slug": "doodhwala",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#F5FAF7"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.naveentech.doodhwala"
+    },
+    "ios": {
+      "bundleIdentifier": "com.naveentech.doodhwala"
+    }
+  }
+}
