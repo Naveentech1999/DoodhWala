@@ -1,193 +1,162 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Animated, FlatList, KeyboardAvoidingView,
-  Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text,
-  TextInput, TouchableOpacity, View
+  SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput,
+  TouchableOpacity, View, Alert
 } from 'react-native';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { supabase, isSupabaseConfigured } from './src/lib/supabase';
 
-type Tab = 'Home' | 'Delivery' | 'Customers' | 'Monthly' | 'Bills';
-type Customer = { id: string; name: string; active: boolean };
-type Product = { id: string; company: string; product_name: string; unit: string; company_mrp: number };
-type Entry = { customer_id: string; product_id: string; delivery_date: string; status: string; delivered_quantity: number; unit: string; customer_price: number };
+type Page = 'Home' | 'Delivery' | 'Customers' | 'Monthly' | 'Bills' | 'Companies';
+type Customer = { name: string; product: string; quantity: number; rate: number | null };
 const GREEN = '#16845B';
 const INK = '#18332A';
 const MUTED = '#718078';
 const BG = '#F4F8F5';
-const today = () => new Date().toISOString().slice(0, 10);
 
-function Button({ title, onPress, secondary = false }: { title: string; onPress: () => void; secondary?: boolean }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  return <Animated.View style={{ transform: [{ scale }] }}>
-    <TouchableOpacity activeOpacity={0.85}
-      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start()}
-      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
-      onPress={onPress} style={[styles.button, secondary && styles.buttonSecondary]}>
-      <Text style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{title}</Text>
-    </TouchableOpacity>
-  </Animated.View>;
-}
+const customers: Customer[] = [
+  {name:'Aarav',product:'Heritage TM',quantity:1,rate:66},
+  {name:'Ananya',product:'Vijaya TM',quantity:1,rate:69},
+  {name:'Kiran',product:'Amul TM',quantity:1,rate:60},
+  {name:'Meera',product:'Heritage CM',quantity:1,rate:66},
+  {name:'Ravi',product:'Jersey TM',quantity:1,rate:66},
+  {name:'Sana',product:'Heritage TM + Small Milk',quantity:1,rate:66},
+  {name:'Vikram',product:'Vijaya SM',quantity:1,rate:70},
+  {name:'Diya',product:'Amul Gold',quantity:1,rate:74},
+  {name:'Farhan',product:'Heritage WM',quantity:1,rate:90},
+  {name:'Isha',product:'Jersey WM',quantity:1,rate:90},
+  {name:'Nikhil',product:'Vijaya WM',quantity:1,rate:80},
+  {name:'Opposite Oxygen Park',product:'Vijaya TM',quantity:1,rate:null}
+];
+const rates = [
+  ['Heritage','TM','₹66/L','₹66/L'],['Heritage','CM','₹66/L','₹66/L'],
+  ['Heritage','SM','₹68/L','₹68/L'],['Heritage','WM','₹90/L','₹90/L'],
+  ['Heritage','Small Milk','₹8/packet','₹8/packet'],['Heritage','Small Curd','₹8/packet','₹8/packet'],
+  ['Vijaya','TM','₹64/L','₹69/L'],['Vijaya','CM','₹64/L','₹69/L'],
+  ['Vijaya','SM','₹70/L','₹70/L'],['Vijaya','WM','₹80/L','₹80/L'],
+  ['Amul','TM','₹60/L','₹60/L'],['Amul','A2','₹84/L','₹84/L'],
+  ['Amul','Gold','₹74/L','₹74/L'],['Jersey','TM','₹66/L','₹66/L'],
+  ['Jersey','WM','₹90/L','₹90/L']
+];
+const money = (n:number) => '₹' + n.toFixed(2);
+const dateLabel = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
 
-function Login({ onDone }: { onDone: () => void }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const signIn = async () => {
-    if (!supabase) return Alert.alert('Setup required', 'Add your Supabase URL and publishable key to the local .env file.');
-    if (!email.trim() || !password) return Alert.alert('Missing details', 'Enter your email and password.');
-    setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    setBusy(false);
-    if (error) Alert.alert('Sign in failed', error.message); else onDone();
-  };
-  return <SafeAreaView style={styles.login}>
-    <Text style={styles.logo}>🥛 DoodhWala</Text>
-    <Text style={styles.subtitle}>Your daily delivery, simply managed.</Text>
-    <View style={styles.card}>
-      <Text style={styles.heading}>Administrator login</Text>
-      <TextInput style={styles.input} placeholder="Email address" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail}/>
-      <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword}/>
-      <Button title={busy ? 'Signing in…' : 'Sign in'} onPress={signIn}/>
-      {!isSupabaseConfigured && <Text style={styles.hint}>Supabase connection will activate after local environment setup.</Text>}
-    </View>
-  </SafeAreaView>;
+function Action({label,onPress,secondary=false}:{label:string;onPress:()=>void;secondary?:boolean}) {
+  return <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[s.button,secondary && s.buttonSecondary]}><Text style={[s.buttonText,secondary && s.buttonTextSecondary]}>{label}</Text></TouchableOpacity>;
 }
+function Panel({children}:{children:React.ReactNode}) { return <View style={s.panel}>{children}</View>; }
+function Heading({children}:{children:React.ReactNode}) { return <Text style={s.heading}>{children}</Text>; }
 
 export default function App() {
-  const [sessionReady, setSessionReady] = useState(false);
-  const [signedIn, setSignedIn] = useState(false);
-  const [tab, setTab] = useState<Tab>('Home');
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [search, setSearch] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [lastUpload, setLastUpload] = useState<string | null>(null);
-  const [billCustomer, setBillCustomer] = useState<Customer | null>(null);
-  const [deliveryCharge, setDeliveryCharge] = useState('52');
-  const [previousBalance, setPreviousBalance] = useState('0');
-  const [month, setMonth] = useState(today().slice(0, 7));
-
-  useEffect(() => {
-    if (!supabase) { setSessionReady(true); return; }
-    supabase.auth.getSession().then(({ data }) => { setSignedIn(Boolean(data.session)); setSessionReady(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setSignedIn(Boolean(session)));
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  const load = async () => {
-    if (!supabase) return;
-    const [c, p, d] = await Promise.all([
-      supabase.from('customers').select('id,name,active').eq('active', true).order('name'),
-      supabase.from('products').select('id,company,product_name,unit,company_mrp').order('company'),
-      supabase.from('delivery_entries').select('customer_id,product_id,delivery_date,status,delivered_quantity,unit,customer_price').eq('delivery_date', today())
-    ]);
-    if (c.error || p.error || d.error) {
-      Alert.alert('Could not load data', c.error?.message || p.error?.message || d.error?.message);
-      return;
-    }
-    setCustomers(c.data || []); setProducts(p.data || []); setEntries(d.data || []);
+  const [page,setPage] = useState<Page>('Home');
+  const [delivered,setDelivered] = useState<number[]>([]);
+  const [absent,setAbsent] = useState<number[]>([]);
+  const [search,setSearch] = useState('');
+  const [month,setMonth] = useState(new Date().toISOString().slice(0,7));
+  const [selected,setSelected] = useState(0);
+  const [charge,setCharge] = useState('52');
+  const [balance,setBalance] = useState('0');
+  const filtered = useMemo(()=>customers.map((c,i)=>({c,i})).filter(x=>x.c.name.toLowerCase().includes(search.toLowerCase())),[search]);
+  const mark = (i:number,yes:boolean) => {
+    setDelivered(old=>yes?[...old.filter(x=>x!==i),i]:old.filter(x=>x!==i));
+    setAbsent(old=>yes?old.filter(x=>x!==i):[...old.filter(x=>x!==i),i]);
   };
-  useEffect(() => { if (signedIn) load(); }, [signedIn]);
+  const reset = () => {setDelivered([]);setAbsent([]);};
+  const go = (p:Page) => {setPage(p);setSearch('');};
+  const c = customers[selected];
+  const rate = c.rate ?? 69;
+  const milk = c.quantity * rate * 26;
+  const total = milk + (Number(charge)||0) + (Number(balance)||0);
+  const tabs:Page[] = ['Home','Delivery','Customers','Monthly','Bills','Companies'];
 
-  const filtered = useMemo(() => customers.filter(c => c.name.toLowerCase().includes(search.toLowerCase())), [customers, search]);
-  const deliveredCount = new Set(entries.filter(e => e.status === 'delivered').map(e => e.customer_id)).size;
-  const milkAmount = billCustomer ? entries.filter(e => e.customer_id === billCustomer.id && e.status === 'delivered').reduce((s, e) => s + e.delivered_quantity * e.customer_price, 0) : 0;
+  const customerRows = (mode:'delivery'|'customer'|'monthly') => filtered.map(({c:customer,i})=>
+    <View key={customer.name} style={s.row}>
+      <View style={{flex:1}}>
+        <Text style={s.customerName}>{customer.name}</Text>
+        <Text style={s.muted}>{customer.product} · {customer.quantity} unit</Text>
+      </View>
+      {mode==='delivery' ? <>
+        <Text style={[s.pill,absent.includes(i)&&s.pillRed]}>{delivered.includes(i)?'Delivered':absent.includes(i)?'Not delivered':'Not marked'}</Text>
+        <TouchableOpacity style={s.tick} onPress={()=>mark(i,true)}><Text style={s.action}>✓</Text></TouchableOpacity>
+        <TouchableOpacity style={s.cross} onPress={()=>mark(i,false)}><Text style={{color:'#A33',fontWeight:'800'}}>—</Text></TouchableOpacity>
+      </> : mode==='monthly' ?
+        <TouchableOpacity style={s.miniButton} onPress={()=>setSelected(i)}><Text style={s.action}>View month →</Text></TouchableOpacity> :
+        <Text style={s.pill}>Active</Text>}
+    </View>
+  );
 
-  const toggleDelivery = async (customer: Customer, status: 'delivered' | 'not_delivered') => {
-    if (!supabase) return Alert.alert('Not connected', 'Configure Supabase before saving delivery data.');
-    const { error } = await supabase.from('daily_attendance').upsert({
-      owner_id: (await supabase.auth.getUser()).data.user?.id,
-      customer_id: customer.id, delivery_date: today(), status
-    }, { onConflict: 'owner_id,customer_id,delivery_date' });
-    if (error) return Alert.alert('Save failed', error.message);
-    Alert.alert('Saved', customer.name + ': ' + status.replace('_', ' '));
-  };
-
-  const uploadDay = async () => {
-    if (!supabase) return Alert.alert('Not connected', 'Configure Supabase before uploading.');
-    setUploading(true);
-    const user = await supabase.auth.getUser();
-    if (!user.data.user) { setUploading(false); return Alert.alert('Login required', 'Please sign in again.'); }
-    const { error } = await supabase.from('daily_attendance').select('id').eq('delivery_date', today()).limit(1);
-    setUploading(false);
-    if (error) return Alert.alert('Upload check failed', error.message);
-    setLastUpload(new Date().toLocaleString());
-    Alert.alert('Database checked', 'Attendance records are accessible. Delivery quantity upload will be enabled after product quantities are entered.');
-  };
-
-  const signOut = async () => { await supabase?.auth.signOut(); setCustomers([]); setEntries([]); };
-
-  if (!sessionReady) return <View style={styles.center}><ActivityIndicator color={GREEN}/></View>;
-  if (!signedIn) return <Login onDone={() => setSignedIn(true)}/>;
-
-  const renderCustomer = ({ item }: { item: Customer }) => {
-    const row = entries.find(e => e.customer_id === item.id);
-    return <View style={styles.customerRow}>
-      <View style={{ flex: 1 }}><Text style={styles.customerName}>{item.name}</Text><Text style={styles.muted}>{row?.status === 'delivered' ? 'Delivered today' : row?.status === 'not_delivered' ? 'Not delivered' : 'Not marked yet'}</Text></View>
-      <TouchableOpacity style={styles.smallAction} onPress={() => toggleDelivery(item, 'delivered')}><Text style={styles.actionText}>✓</Text></TouchableOpacity>
-      <TouchableOpacity style={[styles.smallAction, styles.absent]} onPress={() => toggleDelivery(item, 'not_delivered')}><Text style={[styles.actionText, { color: '#B84C4C' }]}>—</Text></TouchableOpacity>
-    </View>;
-  };
-
-  return <SafeAreaView style={styles.safe}>
-    <ExpoStatusBar style="dark"/>
-    <View style={styles.header}><View><Text style={styles.logoSmall}>🥛 DoodhWala</Text><Text style={styles.muted}>Morning delivery · {today()}</Text></View><TouchableOpacity onPress={signOut}><Text style={styles.signout}>Sign out</Text></TouchableOpacity></View>
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      {tab === 'Home' && <>
-        <Text style={styles.greeting}>Good morning 👋</Text><Text style={styles.subtitle}>Here’s your delivery overview.</Text>
-        <View style={styles.metrics}><View style={styles.metric}><Text style={styles.metricValue}>{customers.length}</Text><Text style={styles.muted}>Customers</Text></View><View style={styles.metric}><Text style={styles.metricValue}>{deliveredCount}</Text><Text style={styles.muted}>Delivered</Text></View></View>
-        <View style={styles.card}><Text style={styles.heading}>Today's progress</Text><Text style={styles.metricValue}>{customers.length ? Math.round(deliveredCount / customers.length * 100) : 0}%</Text><View style={styles.track}><View style={[styles.fill, { width: (customers.length ? Math.min(100, deliveredCount / customers.length * 100) : 0) + '%' }]}/></View><Text style={styles.muted}>{deliveredCount} of {customers.length} customers marked delivered</Text></View>
-        <Button title="Open delivery list" onPress={() => setTab('Delivery')}/><Button title={uploading ? 'Checking…' : 'Upload daily data'} onPress={uploadDay} secondary/>
-        {lastUpload && <Text style={styles.hint}>Last database check: {lastUpload}</Text>}
+  return <SafeAreaView style={s.safe}>
+    <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF"/>
+    <View style={s.header}>
+      <View><Text style={s.brand}>🥛 DoodhWala</Text><Text style={s.muted}>Morning delivery management</Text></View>
+      <Text style={s.muted}>{dateLabel}</Text>
+    </View>
+    <View style={s.navWrap}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.nav}>
+      {tabs.map(t=><TouchableOpacity key={t} onPress={()=>go(t)} style={[s.navItem,page===t&&s.navSelected]}><Text style={[s.navText,page===t&&s.navTextActive]}>{t}</Text></TouchableOpacity>)}
+    </ScrollView></View>
+    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      {page==='Home' && <>
+        <View style={s.pageHead}><View><Text style={s.title}>Good morning 👋</Text><Text style={s.muted}>Here’s your delivery overview.</Text></View><Text style={s.tag}>MORNING ROUTE</Text></View>
+        <View style={s.metrics}>
+          <View style={s.stat}><Text style={s.muted}>Customers</Text><Text style={s.statValue}>{customers.length}</Text></View>
+          <View style={s.stat}><Text style={s.muted}>Delivered</Text><Text style={s.statValue}>{delivered.length}</Text></View>
+          <View style={s.stat}><Text style={s.muted}>Not delivered</Text><Text style={s.statValue}>{absent.length}</Text></View>
+        </View>
+        <Panel><Heading>Today's progress</Heading><Text style={s.statValue}>{Math.round(delivered.length/customers.length*100)}%</Text><View style={s.track}><View style={[s.fill,{width:(delivered.length/customers.length*100)+'%'}]}/></View><Text style={s.muted}>{delivered.length} of {customers.length} customers marked delivered</Text></Panel>
+        <Action label="Open delivery list →" onPress={()=>go('Delivery')}/>
+        <Text style={s.notice}>Interactive mobile prototype. Demo changes stay on this device session and are not yet saved to Supabase.</Text>
       </>}
-      {tab === 'Delivery' && <>
-        <Text style={styles.heading}>Morning attendance</Text><Text style={styles.muted}>Mark each customer delivered or not delivered.</Text>
-        <TextInput style={styles.input} placeholder="Search customers" value={search} onChangeText={setSearch}/>
-        {filtered.map(c => <View key={c.id}>{renderCustomer({ item: c })}</View>)}
-        <Button title="Upload daily data" onPress={uploadDay}/>
+      {page==='Delivery' && <>
+        <View style={s.pageHead}><View><Text style={s.title}>Morning delivery</Text><Text style={s.muted}>Mark each customer delivered or not delivered.</Text></View><Text style={s.tag}>MORNING ONLY</Text></View>
+        <Panel><View style={s.toolbar}><TextInput value={search} onChangeText={setSearch} placeholder="Search customers…" style={[s.input,{flex:1}]}/><TouchableOpacity onPress={reset} style={s.miniButton}><Text style={s.action}>Reset</Text></TouchableOpacity></View>{customerRows('delivery')}</Panel>
       </>}
-      {tab === 'Customers' && <>
-        <Text style={styles.heading}>Customers</Text><TextInput style={styles.input} placeholder="Search customers" value={search} onChangeText={setSearch}/>
-        {filtered.map(c => <View style={styles.customerRow} key={c.id}><Text style={styles.customerName}>{c.name}</Text><Text style={styles.muted}>Active</Text></View>)}
-        <Text style={styles.hint}>Customer creation and product assignments are the next implementation step.</Text>
+      {page==='Customers' && <>
+        <Heading>Customers</Heading><Panel><TextInput value={search} onChangeText={setSearch} placeholder="Search customers…" style={s.input}/>{customerRows('customer')}</Panel>
       </>}
-      {tab === 'Monthly' && <>
-        <Text style={styles.heading}>Monthly delivery history</Text><TextInput style={styles.input} value={month} onChangeText={setMonth} placeholder="YYYY-MM"/>
-        {customers.map(c => <TouchableOpacity key={c.id} style={styles.customerRow} onPress={() => setBillCustomer(c)}><Text style={styles.customerName}>{c.name}</Text><Text style={styles.actionText}>View ›</Text></TouchableOpacity>)}
-        {billCustomer && <View style={styles.card}><Text style={styles.heading}>{billCustomer.name}</Text><Text style={styles.muted}>Monthly date-wise history will be loaded here for {month}.</Text><Button title="Close" secondary onPress={() => setBillCustomer(null)}/></View>}
+      {page==='Monthly' && <>
+        <View style={s.pageHead}><View><Text style={s.title}>Monthly history</Text><Text style={s.muted}>Choose a customer to inspect sample date-wise records.</Text></View></View>
+        <TextInput value={month} onChangeText={setMonth} placeholder="YYYY-MM" style={s.input}/>
+        <Panel><TextInput value={search} onChangeText={setSearch} placeholder="Search customers…" style={s.input}/>{customerRows('monthly')}
+          <View style={s.rule}/><Heading>{c.name} · {month}</Heading>
+          {Array.from({length:7},(_,n)=><View key={n} style={s.historyRow}><Text style={s.muted}>{String(n+1).padStart(2,'0')} {month}</Text><Text style={s.customerName}>{n===2?'Not delivered':'Delivered'}</Text><Text style={s.muted}>{n===2?'—':c.quantity+' unit'}</Text></View>)}
+          <Text style={s.notice}>Illustrative history only; actual delivery records will come from the database.</Text>
+        </Panel>
       </>}
-      {tab === 'Bills' && <>
-        <Text style={styles.heading}>Customer bills</Text>
-        {customers.map(c => <TouchableOpacity key={c.id} style={styles.customerRow} onPress={() => setBillCustomer(c)}><Text style={styles.customerName}>{c.name}</Text><Text style={styles.actionText}>Prepare bill ›</Text></TouchableOpacity>)}
-        {billCustomer && <View style={styles.receipt}>
-          <Text style={styles.receiptTitle}>DOODHWALA</Text><Text style={styles.receiptSub}>{billCustomer.name} · {month}</Text>
-          <View style={styles.rule}/><Text style={styles.receiptLine}>Milk amount              ₹{milkAmount.toFixed(2)}</Text>
-          <Text style={styles.receiptLine}>Delivery charge          ₹{Number(deliveryCharge || 0).toFixed(2)}</Text>
-          <Text style={styles.receiptLine}>Previous balance        ₹{Number(previousBalance || 0).toFixed(2)}</Text>
-          <View style={styles.rule}/><Text style={styles.total}>Total payable  ₹{(milkAmount + Number(deliveryCharge || 0) + Number(previousBalance || 0)).toFixed(2)}</Text>
-          <TextInput style={styles.input} keyboardType="decimal-pad" value={deliveryCharge} onChangeText={setDeliveryCharge} placeholder="Delivery charge"/>
-          <TextInput style={styles.input} keyboardType="decimal-pad" value={previousBalance} onChangeText={setPreviousBalance} placeholder="Previous balance"/>
-        </View>}
+      {page==='Bills' && <>
+        <Heading>Customer bills</Heading><Panel>
+          <Text style={s.label}>Select customer</Text>
+          <View style={s.customerPicker}>{customers.map((x,i)=><TouchableOpacity key={x.name} onPress={()=>setSelected(i)} style={[s.pickerItem,selected===i&&s.pickerActive]}><Text style={[s.pickerText,selected===i&&s.pickerTextActive]}>{x.name}</Text></TouchableOpacity>)}</View>
+          <View style={s.receipt}>
+            <Text style={s.receiptTitle}>DOODHWALA</Text><Text style={s.receiptSub}>{c.name} · {month}</Text>
+            <View style={s.receiptLine}><Text style={s.receiptText}>Total days</Text><Text style={s.receiptText}>30</Text></View>
+            <View style={s.receiptLine}><Text style={s.receiptText}>Delivered days</Text><Text style={s.receiptText}>26</Text></View>
+            <View style={s.receiptLine}><Text style={s.receiptText}>Not delivered</Text><Text style={s.receiptText}>4</Text></View>
+            <View style={s.rule}/><View style={s.receiptLine}><Text style={s.receiptText}>Milk amount</Text><Text style={s.receiptText}>{money(milk)}</Text></View>
+            <View style={s.receiptLine}><Text style={s.receiptText}>Delivery charge</Text><Text style={s.receiptText}>{money(Number(charge)||0)}</Text></View>
+            <View style={s.receiptLine}><Text style={s.receiptText}>Previous balance</Text><Text style={s.receiptText}>{money(Number(balance)||0)}</Text></View>
+            <View style={s.rule}/><View style={s.receiptLine}><Text style={s.total}>Total payable</Text><Text style={s.total}>{money(total)}</Text></View>
+          </View>
+          <Text style={s.label}>Delivery charge (editable)</Text><TextInput keyboardType="decimal-pad" value={charge} onChangeText={setCharge} style={s.input}/>
+          <Text style={s.label}>Previous balance</Text><TextInput keyboardType="decimal-pad" value={balance} onChangeText={setBalance} style={s.input}/>
+          <Text style={s.notice}>Demo bill values: 26 delivered days and 4 not delivered days. Actual monthly billing needs saved delivery quantities.</Text>
+        </Panel>
       </>}
+      {page==='Companies' && <>
+        <Heading>Company rates & settlement</Heading><Panel><Text style={s.label}>Company product rates</Text>
+          {rates.map((r,i)=><View key={i} style={s.rateRow}><View style={{flex:1}}><Text style={s.customerName}>{r[0]} · {r[1]}</Text><Text style={s.muted}>Company MRP {r[2]}</Text></View><Text style={s.rateValue}>{r[3]}</Text></View>)}
+          <Text style={s.notice}>Company MRP and customer selling price are kept separate. Commission rule: ₹5 per net litre. Packet sizes are not assumed.</Text>
+        </Panel>
+      </>}
+      <Text style={s.footer}>DoodhWala · Morning delivery</Text>
     </ScrollView>
-    <View style={styles.nav}>{(['Home','Delivery','Customers','Monthly','Bills'] as Tab[]).map(t => <TouchableOpacity key={t} onPress={() => { setTab(t); setBillCustomer(null); }} style={styles.navItem}><Text style={[styles.navText, tab === t && styles.navActive]}>{t}</Text></TouchableOpacity>)}</View>
   </SafeAreaView>;
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG }, login: { flex: 1, backgroundColor: BG, justifyContent: 'center', padding: 24 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, header: { paddingHorizontal: 20, paddingVertical: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF' },
-  content: { padding: 18, paddingBottom: 100 }, logo: { fontSize: 30, fontWeight: '800', color: GREEN, textAlign: 'center' }, logoSmall: { fontSize: 21, fontWeight: '800', color: GREEN }, signout: { color: GREEN, fontWeight: '700' },
-  greeting: { fontSize: 27, fontWeight: '800', color: INK, marginTop: 8 }, subtitle: { color: MUTED, marginTop: 5, marginBottom: 18 }, heading: { fontSize: 19, fontWeight: '800', color: INK, marginBottom: 12 }, muted: { color: MUTED, fontSize: 12, marginTop: 4 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 18, marginVertical: 10, shadowColor: '#173D2D', shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
-  metrics: { flexDirection: 'row', gap: 12, marginBottom: 12 }, metric: { flex: 1, backgroundColor: '#E8F3EC', borderRadius: 16, padding: 18 }, metricValue: { color: GREEN, fontSize: 27, fontWeight: '800', marginBottom: 4 },
-  track: { height: 8, borderRadius: 8, backgroundColor: '#E6EDE8', overflow: 'hidden', marginVertical: 12 }, fill: { height: 8, backgroundColor: GREEN, borderRadius: 8 },
-  button: { backgroundColor: GREEN, borderRadius: 13, padding: 15, alignItems: 'center', marginVertical: 6 }, buttonSecondary: { backgroundColor: '#E5F1E9' }, buttonText: { color: '#FFFFFF', fontWeight: '800' }, buttonTextSecondary: { color: GREEN },
-  input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2EAE4', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginVertical: 7, color: INK },
-  customerRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 13, padding: 13, marginVertical: 5, gap: 9 }, customerName: { color: INK, fontWeight: '700', flex: 1 },
-  smallAction: { backgroundColor: '#E4F4EA', width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, absent: { backgroundColor: '#FCEEEE' }, actionText: { color: GREEN, fontWeight: '800' },
-  nav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#E6EDE8', justifyContent: 'space-around' }, navItem: { padding: 5 }, navText: { color: MUTED, fontSize: 11, fontWeight: '600' }, navActive: { color: GREEN, fontWeight: '900' },
-  receipt: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 10, marginTop: 12, borderWidth: 1, borderColor: '#E5E9E6' }, receiptTitle: { textAlign: 'center', color: INK, fontSize: 15, fontWeight: '900' }, receiptSub: { textAlign: 'center', color: MUTED, fontSize: 11, marginVertical: 4 }, rule: { borderTopWidth: 1, borderStyle: 'dashed', borderColor: '#CBD6CE', marginVertical: 8 }, receiptLine: { color: INK, fontSize: 12, marginVertical: 3 }, total: { color: GREEN, fontSize: 14, fontWeight: '900', marginVertical: 5 }, hint: { color: MUTED, fontSize: 11, lineHeight: 16, marginTop: 8 }
+const s = StyleSheet.create({
+  safe:{flex:1,backgroundColor:BG},header:{backgroundColor:'#FFFFFF',paddingHorizontal:18,paddingVertical:13,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderColor:'#E7EEE9'},
+  brand:{fontSize:21,fontWeight:'900',color:GREEN},muted:{fontSize:12,color:MUTED,marginTop:3},navWrap:{backgroundColor:'#FFFFFF',borderBottomWidth:1,borderColor:'#E7EEE9'},nav:{paddingHorizontal:10,paddingVertical:8,gap:6},navItem:{paddingVertical:10,paddingHorizontal:13,borderRadius:10},navSelected:{backgroundColor:'#E5F1E9'},navText:{fontSize:12,fontWeight:'700',color:MUTED},navTextActive:{color:GREEN},
+  content:{padding:16,paddingBottom:40},pageHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:15},title:{fontSize:24,fontWeight:'900',color:INK},tag:{fontSize:9,fontWeight:'900',color:'#795D16',backgroundColor:'#FFF4D8',padding:7,borderRadius:7,overflow:'hidden'},
+  metrics:{flexDirection:'row',gap:8,marginBottom:14},stat:{flex:1,backgroundColor:'#FFFFFF',borderRadius:14,padding:12,borderWidth:1,borderColor:'#E5ECE7'},statValue:{fontSize:25,fontWeight:'900',color:GREEN,marginTop:6},
+  panel:{backgroundColor:'#FFFFFF',borderRadius:16,borderWidth:1,borderColor:'#E5ECE7',padding:15,marginBottom:14},heading:{fontSize:17,fontWeight:'850',color:INK,marginBottom:12},track:{height:9,backgroundColor:'#E6EDE8',borderRadius:20,overflow:'hidden',marginVertical:12},fill:{height:9,backgroundColor:GREEN,borderRadius:20},
+  button:{backgroundColor:GREEN,borderRadius:11,padding:14,alignItems:'center',marginVertical:6},buttonSecondary:{backgroundColor:'#E5F1E9'},buttonText:{color:'#FFFFFF',fontWeight:'800'},buttonTextSecondary:{color:GREEN},
+  notice:{fontSize:11,lineHeight:17,color:MUTED,marginVertical:9},toolbar:{flexDirection:'row',gap:8,alignItems:'center',marginBottom:8},input:{backgroundColor:'#FFFFFF',borderWidth:1,borderColor:'#DCE6DF',borderRadius:10,paddingHorizontal:12,paddingVertical:10,color:INK,marginVertical:5},
+  row:{flexDirection:'row',alignItems:'center',gap:7,paddingVertical:12,borderBottomWidth:1,borderColor:'#EDF1EE'},customerName:{fontSize:13,fontWeight:'700',color:INK,flexShrink:1},pill:{fontSize:10,color:GREEN,backgroundColor:'#E5F1E9',paddingHorizontal:8,paddingVertical:5,borderRadius:20,overflow:'hidden'},pillRed:{color:'#A33',backgroundColor:'#FCEEEE'},tick:{width:30,height:30,alignItems:'center',justifyContent:'center',backgroundColor:'#E4F4EA',borderRadius:8},cross:{width:30,height:30,alignItems:'center',justifyContent:'center',backgroundColor:'#FCEEEE',borderRadius:8},action:{fontSize:11,fontWeight:'800',color:GREEN},miniButton:{backgroundColor:'#E5F1E9',padding:8,borderRadius:8},rule:{borderTopWidth:1,borderStyle:'dashed',borderColor:'#CBD6CE',marginVertical:10},
+  historyRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingVertical:9,borderBottomWidth:1,borderColor:'#EDF1EE'},customerPicker:{maxHeight:120,flexDirection:'row',flexWrap:'wrap',gap:6,marginVertical:8},pickerItem:{paddingHorizontal:9,paddingVertical:7,backgroundColor:'#F0F4F1',borderRadius:8},pickerActive:{backgroundColor:GREEN},pickerText:{fontSize:10,color:INK},pickerTextActive:{color:'#FFFFFF'},label:{fontSize:11,fontWeight:'700',color:MUTED,marginTop:9},receipt:{borderWidth:1,borderStyle:'dashed',borderColor:'#AAB8AF',padding:13,marginVertical:12,borderRadius:8},receiptTitle:{fontSize:15,fontWeight:'900',color:INK,textAlign:'center'},receiptSub:{fontSize:10,color:MUTED,textAlign:'center',marginVertical:5},receiptLine:{flexDirection:'row',justifyContent:'space-between',marginVertical:5},receiptText:{fontSize:11,color:INK},total:{fontSize:13,fontWeight:'900',color:GREEN},rateRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,borderColor:'#EDF1EE'},rateValue:{fontSize:12,fontWeight:'800',color:GREEN},footer:{textAlign:'center',fontSize:10,color:MUTED,marginVertical:10}
 });
